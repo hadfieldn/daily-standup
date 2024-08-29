@@ -56,6 +56,14 @@ export const handler = async () => {
   );
   const todayEvents = await getCalendarEvents(calendar, today, today.clone().endOf('day'));
 
+  if (isWeekend(today)) {
+    console.log('Skipping standup because it is a weekend');
+    return {
+      statusCode: 200,
+      body: 'Skipping standup because it is a weekend.',
+    };
+  }
+
   const vacationEvent = detectVacationEvent(todayEvents);
   if (vacationEvent) {
     console.log(`Skipping standup because of out-of-office event '${vacationEvent}'`);
@@ -116,8 +124,7 @@ function addWeekdays(startDate: moment.Moment, daysToAdd: number, holidays: stri
   while (addedDays < absDaysToAdd) {
     date.add(increment, 'days');
 
-    const isWeekend = date.isoWeekday() === 6 || date.isoWeekday() === 7;
-    if (isWeekend) {
+    if (isWeekend(date)) {
       continue;
     }
 
@@ -131,6 +138,13 @@ function addWeekdays(startDate: moment.Moment, daysToAdd: number, holidays: stri
   }
 
   return date;
+}
+
+/**
+ * Check if a moment date falls on a weekend (Saturday or Sunday)
+ */
+function isWeekend(date: moment.Moment) {
+  return date.isoWeekday() === 6 || date.isoWeekday() === 7;
 }
 
 /**
