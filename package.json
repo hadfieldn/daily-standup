@@ -1,0 +1,26 @@
+{
+  "name": "daily-standup",
+  "version": "1.0.0",
+  "description": "A Lambda function for daily standup automation",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "npx tsc",
+    "prepare-deploy": "npm run build && npm install --only=prod && cp -R node_modules dist/ && cp package.json dist/ && cd dist && zip -r ../lambda-deployment-package.zip .",
+    "deploy": "aws lambda update-function-code --function-name daily-standup --zip-file fileb://lambda-deployment-package.zip",
+    "local-run": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "@slack/web-api": "^7.3.4",
+    "axios": "^1.7.5",
+    "dotenv": "^16.4.5",
+    "google-auth-library": "^9.14.0",
+    "googleapis": "^143.0.0",
+    "moment-timezone": "^0.5.45",
+    "openai": "^4.56.1"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
+  }
+}
