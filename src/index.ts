@@ -1,10 +1,10 @@
-import { google } from "googleapis";
-import { OAuth2Client } from "google-auth-library";
-import axios from "axios";
-import { WebClient } from "@slack/web-api";
-import moment from "moment-timezone";
-import dotenv from "dotenv";
-import OpenAI from "openai";
+import { google } from 'googleapis';
+import { OAuth2Client } from 'google-auth-library';
+import axios from 'axios';
+import { WebClient } from '@slack/web-api';
+import moment from 'moment-timezone';
+import dotenv from 'dotenv';
+import OpenAI from 'openai';
 
 dotenv.config();
 
@@ -17,54 +17,48 @@ const LINEAR_API_KEY = process.env.LINEAR_API_KEY!;
 const SLACK_API_TOKEN = process.env.SLACK_API_TOKEN!;
 const SLACK_STANDUP_CHANNEL = process.env.SLACK_STANDUP_CHANNEL!;
 const SLACK_USER_ID = process.env.SLACK_USER_ID!;
-const USE_STANDUP_CHANNEL = process.env.USE_STANDUP_CHANNEL! === "true";
-const HOLIDAYS = process.env.HOLIDAYS?.split(",") || [];
+const USE_STANDUP_CHANNEL = process.env.USE_STANDUP_CHANNEL! === 'true';
+const HOLIDAYS = process.env.HOLIDAYS?.split(',') || [];
 
 const slackClient = new WebClient(SLACK_API_TOKEN);
 
-const IN_PROGRESS_STATUS_NAME = "In Progress";
-const SUBMITTED_STATUS_NAME = "Code Review";
-const MERGED_STATUS_NAME = "Testing";
+const IN_PROGRESS_STATUS_NAME = 'In Progress';
+const SUBMITTED_STATUS_NAME = 'Code Review';
+const MERGED_STATUS_NAME = 'Testing';
 
 export const handler = async () => {
-  const timeZone = "America/Denver";
+  const timeZone = 'America/Denver';
   const now = moment().tz(timeZone);
-  const today = now.clone().startOf("day");
+  const today = now.clone().startOf('day');
   const yesterday = addWeekdays(today.clone(), -1, HOLIDAYS);
   // don't report issues that were created more than 2 months ago
-  const issueCutoff = today.clone().add(-2, "months");
+  const issueCutoff = today.clone().add(-2, 'months');
   // don't report issues that have been in progress more than 5 days
   const inProgressCutoff = addWeekdays(today.clone(), -7, HOLIDAYS);
 
-  console.log("Generating standup report", {
-    today: today.format("YYYY-MM-DD"),
-    yesterday: yesterday.format("YYYY-MM-DD"),
-    issueCutoff: issueCutoff.format("YYYY-MM-DD"),
-    inProgressCutoff: inProgressCutoff.format("YYYY-MM-DD"),
+  console.log('Generating standup report', {
+    today: today.format('YYYY-MM-DD'),
+    yesterday: yesterday.format('YYYY-MM-DD'),
+    issueCutoff: issueCutoff.format('YYYY-MM-DD'),
+    inProgressCutoff: inProgressCutoff.format('YYYY-MM-DD'),
   });
 
   // Initialize Google Calendar API client
   const oAuth2Client = new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
   oAuth2Client.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN });
-  const calendar = google.calendar({ version: "v3", auth: oAuth2Client });
+  const calendar = google.calendar({ version: 'v3', auth: oAuth2Client });
 
   // Get Google Calendar events
   const yesterdayEvents = await getCalendarEvents(
     calendar,
     yesterday,
-    yesterday.clone().endOf("day"),
+    yesterday.clone().endOf('day')
   );
-  const todayEvents = await getCalendarEvents(
-    calendar,
-    today,
-    today.clone().endOf("day"),
-  );
+  const todayEvents = await getCalendarEvents(calendar, today, today.clone().endOf('day'));
 
   const vacationEvent = detectVacationEvent(todayEvents);
   if (vacationEvent) {
-    console.log(
-      `Skipping standup because of out-of-office event '${vacationEvent}'`,
-    );
+    console.log(`Skipping standup because of out-of-office event '${vacationEvent}'`);
     return {
       statusCode: 200,
       body: `Skipping standup because of out-of-office event '${vacationEvent}'.`,
@@ -93,7 +87,7 @@ export const handler = async () => {
     todayIssues,
   });
 
-  console.log("Prepared slack message:", { slackMessage });
+  console.log('Prepared slack message:', { slackMessage });
 
   // Schedule Slack message
   // (NOTE: we don't schedule the message, we assume the Lambda function will be invoked at the scheduled time)
@@ -102,40 +96,34 @@ export const handler = async () => {
 
   return {
     statusCode: 200,
-    body: "Scheduled message successfully.",
+    body: 'Scheduled message successfully.',
   };
 };
 
 /**
  * Add weekdays to a moment date, skipping weekends and holidays
  */
-function addWeekdays(
-  startDate: moment.Moment,
-  daysToAdd: number,
-  holidays: string[] = [],
-) {
+function addWeekdays(startDate: moment.Moment, daysToAdd: number, holidays: string[] = []) {
   let absDaysToAdd = Math.abs(daysToAdd);
   let addedDays = 0;
   let increment = daysToAdd > 0 ? 1 : -1;
 
   // Convert holidays array to a Set of formatted date strings for faster lookup
-  const holidaySet = new Set(
-    holidays.map((holiday) => moment(holiday).format("YYYY-MM-DD")),
-  );
+  const holidaySet = new Set(holidays.map((holiday) => moment(holiday).format('YYYY-MM-DD')));
 
   const date = startDate.clone();
 
   while (addedDays < absDaysToAdd) {
-    date.add(increment, "days");
+    date.add(increment, 'days');
 
     const isWeekend = date.isoWeekday() === 6 || date.isoWeekday() === 7;
     if (isWeekend) {
       continue;
     }
 
-    const isHoliday = holidaySet.has(date.format("YYYY-MM-DD"));
+    const isHoliday = holidaySet.has(date.format('YYYY-MM-DD'));
     if (isHoliday) {
-      console.log("Skipping holiday", date.format("YYYY-MM-DD"));
+      console.log('Skipping holiday', date.format('YYYY-MM-DD'));
       continue;
     }
 
@@ -151,14 +139,14 @@ function addWeekdays(
 async function getCalendarEvents(
   calendar: any,
   start: moment.Moment,
-  end: moment.Moment,
+  end: moment.Moment
 ): Promise<string[]> {
   const response = await calendar.events.list({
     calendarId: GOOGLE_CALENDAR_ID,
     timeMin: start.toISOString(),
     timeMax: end.toISOString(),
     singleEvents: true,
-    orderBy: "startTime",
+    orderBy: 'startTime',
   });
 
   const events = response.data.items || [];
@@ -166,9 +154,9 @@ async function getCalendarEvents(
     .filter(
       (event) =>
         event.summary &&
-        event.transparency !== "opaque" &&
-        !event.description?.toLowerCase().includes("personal") &&
-        event.summary.toLowerCase().trim() !== "busy",
+        event.transparency !== 'opaque' &&
+        !event.description?.toLowerCase().includes('personal') &&
+        event.summary.toLowerCase().trim() !== 'busy'
     )
     .map((event) => event.summary);
 }
@@ -191,9 +179,9 @@ async function getLinearIssues({
   /** no issues set to in-progress status before this date will be included */
   inProgressCutoff: moment.Moment;
 }): Promise<{ inProgress: string[]; submitted: string[]; merged: string[] }> {
-  const url = "https://api.linear.app/graphql";
+  const url = 'https://api.linear.app/graphql';
   const headers = {
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
     Authorization: `${LINEAR_API_KEY}`,
   };
 
@@ -243,11 +231,7 @@ query ($start: DateTimeOrDuration!, $end: DateTimeOrDuration!, $cutoff: DateTime
   const response = await axios.post(url, { query, variables }, { headers });
 
   const issues = response.data.data.issues.nodes;
-  const stateChangedTo = (
-    issue: any,
-    stateName: string,
-    options: { after?: moment.Moment } = {},
-  ) =>
+  const stateChangedTo = (issue: any, stateName: string, options: { after?: moment.Moment } = {}) =>
     issue.history.nodes.some((node: any) => {
       const didChangeToState =
         node.toState?.name === stateName && node.fromState?.name !== stateName;
@@ -264,7 +248,7 @@ query ($start: DateTimeOrDuration!, $end: DateTimeOrDuration!, $cutoff: DateTime
       .filter((issue: any) =>
         stateChangedTo(issue, IN_PROGRESS_STATUS_NAME, {
           after: inProgressCutoff,
-        }),
+        })
       )
       .map(formatIssue),
     submitted: issues
@@ -294,9 +278,9 @@ async function prepareSlackMessage({
   todayEvents: string[];
   todayIssues: any;
 }): Promise<string> {
-  let message = (await getLlmHappyGreeting(new Date())) + "\n";
+  let message = (await getLlmHappyGreeting(new Date())) + '\n';
 
-  message += "Did:\n";
+  message += 'Did:\n';
 
   yesterdayEvents.forEach((event) => {
     message += `• ${event}\n`;
@@ -310,7 +294,7 @@ async function prepareSlackMessage({
     message += `• Merged ${issue}\n`;
   });
 
-  message += "\nDoing:\n";
+  message += '\nDoing:\n';
 
   todayEvents.forEach((event) => {
     message += `• ${event}\n`;
@@ -328,25 +312,20 @@ async function prepareSlackMessage({
  * Defaults to `
  */
 async function getLlmHappyGreeting(date: Date) {
-  const weekday = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(
-    date,
-  );
+  const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(date);
   const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
   });
 
-  const { weatherCondition, temperature } =
-    await getCurrentWeatherAndTemperature(date);
-  console.log(
-    `Current weather: ${weatherCondition}, temperature: ${temperature}`,
-  );
+  const { weatherCondition, temperature } = await getCurrentWeatherAndTemperature(date);
+  console.log(`Current weather: ${weatherCondition}, temperature: ${temperature}`);
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: 'gpt-4o',
       messages: [
         {
-          role: "system",
+          role: 'system',
           content: `
             You are a cheerful, hip, and chill. You speak like a surfer dude who loves people and life. 
             You create happy greetings, using groovy language about the way you are currently feeling. 
@@ -354,7 +333,7 @@ async function getLlmHappyGreeting(date: Date) {
           `,
         },
         {
-          role: "user",
+          role: 'user',
           content: `
             Generate a happy greeting using just two or three words that reflects the way you feel today and/or the emotions you want to send out to brighten others' day.
             Do not use phrasing that sounds like an instruction. (For example, don't say "Be happy" or "Have a great day.")
@@ -377,7 +356,7 @@ async function getLlmHappyGreeting(date: Date) {
 
     return response.choices[0].message.content.trim();
   } catch (error) {
-    console.error("Error generating happy greeting:", error);
+    console.error('Error generating happy greeting:', error);
     return happyGreeting(date); // Fallback to the existing happy greeting function
   }
 }
@@ -388,15 +367,11 @@ async function getLlmHappyGreeting(date: Date) {
 async function happyGreeting(date: Date) {
   const { weatherCondition } = await getCurrentWeatherAndTemperature(date);
   const weatherEmoji = await getCurrentWeatherEmoji(weatherCondition);
-  const weekdayLong = new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
+  const weekdayLong = new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
   }).format(date);
 
-  const greetings = [
-    "Good morning!",
-    `Happy ${weekdayLong}!`,
-    `${weekdayLong}!`,
-  ];
+  const greetings = ['Good morning!', `Happy ${weekdayLong}!`, `${weekdayLong}!`];
 
   const greeting = greetings[Math.floor(Math.random() * greetings.length)];
   return `${greeting} ${weatherEmoji}`;
@@ -407,24 +382,24 @@ async function happyGreeting(date: Date) {
  */
 async function getCurrentWeatherEmoji(weatherCondition: string) {
   switch (weatherCondition) {
-    case "clear":
-      return "☀️";
-    case "clouds":
-      return "🌥️";
-    case "rain":
-      return "🌧️";
-    case "drizzle":
-      return "🌦️";
-    case "thunderstorm":
-      return "⛈️";
-    case "snow":
-      return "🌨️";
-    case "mist":
-      return "😶‍🌫️";
-    case "fog":
-      return "😶‍🌫️";
+    case 'clear':
+      return '☀️';
+    case 'clouds':
+      return '🌥️';
+    case 'rain':
+      return '🌧️';
+    case 'drizzle':
+      return '🌦️';
+    case 'thunderstorm':
+      return '⛈️';
+    case 'snow':
+      return '🌨️';
+    case 'mist':
+      return '😶‍🌫️';
+    case 'fog':
+      return '😶‍🌫️';
     default:
-      return "🌤️";
+      return '🌤️';
   }
 }
 
@@ -438,21 +413,21 @@ async function getCurrentWeatherAndTemperature(date: Date) {
 
   try {
     const response = await axios.get(
-      `https://api.openweathermap.org/data/2.5/weather?lat=${LATITUDE}&lon=${LONGITUDE}&appid=${API_KEY}&units=imperial`,
+      `https://api.openweathermap.org/data/2.5/weather?lat=${LATITUDE}&lon=${LONGITUDE}&appid=${API_KEY}&units=imperial`
     );
     const weatherCondition = response.data.weather[0].main.toLowerCase();
     const temperature = Math.round(response.data.main.temp);
     return { weatherCondition, temperature };
   } catch (error) {
-    console.error("Error fetching weather data:", error);
-    return { weatherCondition: "unknown", temperature: "unknown" }; // Return unknown weather and null temperature if there's an error
+    console.error('Error fetching weather data:', error);
+    return { weatherCondition: 'unknown', temperature: 'unknown' }; // Return unknown weather and null temperature if there's an error
   }
 }
 
 async function sendSlackMessage(
   channelId: string,
   message: string,
-  options: { scheduleAt?: moment.Moment } = {},
+  options: { scheduleAt?: moment.Moment } = {}
 ) {
   try {
     if (options.scheduleAt) {
@@ -469,7 +444,7 @@ async function sendSlackMessage(
       });
     }
   } catch (error) {
-    console.error("Error scheduling Slack message:", error);
+    console.error('Error scheduling Slack message:', error);
   }
 }
 
@@ -479,20 +454,18 @@ async function getStandupChannelId(): Promise<string | undefined> {
   }
   let channelId = await getDirectMessageChannelId(SLACK_USER_ID);
   if (!channelId) {
-    console.error("Failed to get channel ID.");
+    console.error('Failed to get channel ID.');
     return;
   }
   return channelId;
 }
 
-async function getDirectMessageChannelId(
-  userId: string,
-): Promise<string | undefined> {
+async function getDirectMessageChannelId(userId: string): Promise<string | undefined> {
   try {
     const response = await slackClient.conversations.open({ users: userId });
     return response.channel?.id;
   } catch (error) {
-    console.error("Error getting DM channel ID:", error);
+    console.error('Error getting DM channel ID:', error);
     return undefined;
   }
 }
@@ -509,9 +482,9 @@ if (require.main === module) {
   (async () => {
     try {
       const result = await handler(); // Call handler function directly
-      console.log("Local run result:", result);
+      console.log('Local run result:', result);
     } catch (error) {
-      console.error("Error running locally:", error);
+      console.error('Error running locally:', error);
     }
   })();
 }
