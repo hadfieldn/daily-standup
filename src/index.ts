@@ -64,6 +64,15 @@ export const handler = async () => {
     };
   }
 
+  if (isHoliday(today, HOLIDAYS)) {
+    console.log('Skipping standup because it is a holiday');
+    return {
+      statusCode: 200,
+      body: 'Skipping standup because it is a holiday.',
+    };
+  }
+
+
   const vacationEvent = detectVacationEvent(todayEvents);
   if (vacationEvent) {
     console.log(`Skipping standup because of out-of-office event '${vacationEvent}'`);
@@ -109,15 +118,20 @@ export const handler = async () => {
 };
 
 /**
+ * Check if a given date is one of the holidays listed in `holidays.
+ */
+function isHoliday(date: moment.Moment, holidays: string[]): boolean {
+  const holidaySet = new Set(holidays.map((holiday) => moment(holiday).format('YYYY-MM-DD')));
+  return holidaySet.has(date.format('YYYY-MM-DD'));
+}
+
+/**
  * Add weekdays to a moment date, skipping weekends and holidays
  */
 function addWeekdays(startDate: moment.Moment, daysToAdd: number, holidays: string[] = []) {
   let absDaysToAdd = Math.abs(daysToAdd);
   let addedDays = 0;
   let increment = daysToAdd > 0 ? 1 : -1;
-
-  // Convert holidays array to a Set of formatted date strings for faster lookup
-  const holidaySet = new Set(holidays.map((holiday) => moment(holiday).format('YYYY-MM-DD')));
 
   const date = startDate.clone();
 
@@ -128,8 +142,7 @@ function addWeekdays(startDate: moment.Moment, daysToAdd: number, holidays: stri
       continue;
     }
 
-    const isHoliday = holidaySet.has(date.format('YYYY-MM-DD'));
-    if (isHoliday) {
+    if (isHoliday(date, holidays)) {
       console.log('Skipping holiday', date.format('YYYY-MM-DD'));
       continue;
     }
