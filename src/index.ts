@@ -113,7 +113,7 @@ export const handler = async () => {
 
   return {
     statusCode: 200,
-    body: 'Scheduled message successfully.',
+    body: 'Handled successfully',
   };
 };
 
@@ -301,27 +301,45 @@ async function prepareSlackMessage({
   todayIssues,
 }: {
   yesterdayEvents: string[];
-  yesterdayIssues: any;
+  yesterdayIssues: { submitted: string[]; merged: string[] };
   todayEvents: string[];
-  todayIssues: any;
+  todayIssues: { inProgress: string[] };
 }): Promise<string> {
-  let message = (await getLlmHappyGreeting(new Date())) + '\n';
+  let message = (await getLlmHappyGreeting(new Date())) + '\n\n';
 
-  message += 'Did:\n';
+  message += '*Did*\n';
 
   yesterdayEvents.forEach((event) => {
     message += `• ${event}\n`;
   });
 
+  const mergedSet = new Set(yesterdayIssues.merged);
+  const processedIssues = new Set<string>();
+
+  // Handle issues that are only submitted
   yesterdayIssues.submitted.forEach((issue) => {
-    message += `• Submitted ${issue}\n`;
+    if (!mergedSet.has(issue)) {
+      message += `• Submitted ${issue}\n`;
+      processedIssues.add(issue);
+    }
   });
 
+  // Handle issues that are both submitted and merged
+  yesterdayIssues.submitted.forEach((issue) => {
+    if (mergedSet.has(issue)) {
+      message += `• Submitted/merged ${issue}\n`;
+      processedIssues.add(issue);
+    }
+  });
+
+  // Handle issues that are only merged
   yesterdayIssues.merged.forEach((issue) => {
-    message += `• Merged ${issue}\n`;
+    if (!processedIssues.has(issue)) {
+      message += `• Merged ${issue}\n`;
+    }
   });
 
-  message += '\nDoing:\n';
+  message += '\n*Doing*\n';
 
   todayEvents.forEach((event) => {
     message += `• ${event}\n`;
@@ -365,10 +383,12 @@ async function getLlmHappyGreeting(date: Date) {
             Generate a happy greeting using just two or three words that reflects the way you feel today and/or the emotions you want to send out to brighten others' day.
             Do not use phrasing that sounds like an instruction. (For example, don't say "Be happy" or "Have a great day.")
             Don't use any form of these words: vibe, joy.
+            Prefer greetings that use alliteration.
             Follow the greeting with one or two emojis that correspond to the current weather condition of "${weatherCondition}", or a happy or positive idea (smiling face, rainbow, sunflower, rocket, etc). 
             The greeting may include the day of the week (today is ${weekday}).
             Do not use words to fit the emoji. Use emoji that fit the greeting.
-            Do not use emoji that have to do with the ocean or surfing.
+            Use surfing emoji sparingly, only if it fits the greeting well.
+            Use sunflower emoji sparingly, only if it fits the greeting well.
             Prefer the use of only a single emoji, unless a second emoji fits the greeting well.
             Ideally, one of the emojis will correspond an idea or word in the greeting.
             Important: follow each emoji with a space character so that there will be a gap between emojis.
@@ -461,6 +481,15 @@ async function sendSlackMessage(
       await slackClient.chat.scheduleMessage({
         channel: channelId,
         text: message,
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: message,
+            },
+          },
+        ],
         post_at: options.scheduleAt?.unix(),
       });
     } else {
@@ -468,6 +497,15 @@ async function sendSlackMessage(
         channel: channelId,
         text: message,
         mrkdwn: true,
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: message,
+            },
+          },
+        ],
       });
     }
   } catch (error) {
