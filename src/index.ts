@@ -236,10 +236,12 @@ query ($start: DateTimeOrDuration!, $end: DateTimeOrDuration!, $cutoff: DateTime
         { createdAt: { gte: $cutoff }},
         { state: { name: { in: ["${IN_PROGRESS_STATUS_NAME}", "${SUBMITTED_STATUS_NAME}", "${MERGED_STATUS_NAME}"] } } }
         { or: [
-            { and: [{ updatedAt: { gte: $cutoff lte: $end } }, 
-                    { state: { name: { eq: "${IN_PROGRESS_STATUS_NAME}" } } }] },
-            { and: [{ updatedAt: { gte: $start lte: $end } }, 
-                    { state: { name: { neq: "${IN_PROGRESS_STATUS_NAME}" } } }] },
+            # if in progress, must have been created/updated since the cutoff
+            { and: [{ state: { name: { eq: "${IN_PROGRESS_STATUS_NAME}" } } }, 
+                    { updatedAt: { gte: $cutoff }}]},
+            # if not in progress (submitted or merged), must have been created/updated since the start time
+            { and: [{ state: { name: { neq: "${IN_PROGRESS_STATUS_NAME}" } } },
+                    { updatedAt: { gte: $start, lte: $end }}]},
           ], 
         },
         ]}) {
@@ -275,6 +277,10 @@ query ($start: DateTimeOrDuration!, $end: DateTimeOrDuration!, $cutoff: DateTime
 
   const issues = response.data.data.issues.nodes;
   const stateChangedTo = (issue: any, stateName: string, options: { after?: moment.Moment } = {}) =>
+    // was created with the given state and hasn't been updated since
+    // (we count this as the "initial" state change)
+    (issue.history.nodes.length === 0 && issue.state.name === stateName) ||
+    // was updated to the given state
     issue.history.nodes.some((node: any) => {
       const didChangeToState =
         node.toState?.name === stateName && node.fromState?.name !== stateName;
