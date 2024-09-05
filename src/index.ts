@@ -43,18 +43,32 @@ export const handler = async () => {
     inProgressCutoff: inProgressCutoff.format('YYYY-MM-DD'),
   });
 
-  // Initialize Google Calendar API client
-  const oAuth2Client = new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
-  oAuth2Client.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN });
-  const calendar = google.calendar({ version: 'v3', auth: oAuth2Client });
+  let yesterdayEvents: string[];
+  let todayEvents: string[];
 
-  // Get Google Calendar events
-  const yesterdayEvents = await getCalendarEvents(
-    calendar,
-    yesterday,
-    yesterday.clone().endOf('day')
-  );
-  const todayEvents = await getCalendarEvents(calendar, today, today.clone().endOf('day'));
+  try {
+  // Initialize Google Calendar API client
+    const oAuth2Client = new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
+    oAuth2Client.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN });
+    const calendar = google.calendar({ version: 'v3', auth: oAuth2Client });
+
+    // Get Google Calendar events
+    yesterdayEvents = await getCalendarEvents(
+      calendar,
+      yesterday,
+      yesterday.clone().endOf('day')
+    );
+
+    todayEvents = await getCalendarEvents(calendar, today, today.clone().endOf('day'));
+
+  } catch (error) {
+    console.error('Error fetching calendar events:', error);
+    await sendPersonalSlackMessage(`Error fetching calendar events: ${error}`);
+    return {
+      statusCode: 500,
+      body: 'Error fetching calendar events',
+    };
+  }
 
   if (isWeekend(today)) {
     console.log('Skipping standup because it is a weekend');
@@ -181,9 +195,11 @@ async function getCalendarEvents(
     .filter(
       (event) =>
         event.summary &&
-        event.transparency !== 'opaque' &&
+        event.transparency !== 'transparent' &&
+        event.status === 'confirmed' &&
         !event.description?.toLowerCase().includes('personal') &&
-        event.summary.toLowerCase().trim() !== 'busy'
+        event.summary.toLowerCase().trim() !== 'busy' &&
+        (!event.attendees || !event.attendees.some(attendee => attendee.self && attendee.responseStatus === 'declined'))
     )
     .map((event) => event.summary);
 }
@@ -383,7 +399,7 @@ async function getLlmHappyGreeting(date: Date) {
             Generate a happy greeting using just two or three words that reflects the way you feel today and/or the emotions you want to send out to brighten others' day.
             Do not use phrasing that sounds like an instruction. (For example, don't say "Be happy" or "Have a great day.")
             Don't use any form of these words: vibe, joy.
-            Prefer greetings that use alliteration.
+            Moderately prefer greetings that use alliteration, but only if the alliteration is good phonetically. For example, "Terrific Tuesday" is good alliteration but "Terrific Thursday" is not, because "T" and "Th" are different sounds.
             Follow the greeting with one or two emojis that correspond to the current weather condition of "${weatherCondition}", or a happy or positive idea (smiling face, rainbow, sunflower, rocket, etc). 
             The greeting may include the day of the week (today is ${weekday}).
             Do not use words to fit the emoji. Use emoji that fit the greeting.
@@ -481,15 +497,6 @@ async function sendSlackMessage(
       await slackClient.chat.scheduleMessage({
         channel: channelId,
         text: message,
-        blocks: [
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: message,
-            },
-          },
-        ],
         post_at: options.scheduleAt?.unix(),
       });
     } else {
@@ -497,19 +504,17 @@ async function sendSlackMessage(
         channel: channelId,
         text: message,
         mrkdwn: true,
-        blocks: [
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: message,
-            },
-          },
-        ],
       });
     }
   } catch (error) {
     console.error('Error scheduling Slack message:', error);
+  }
+}
+
+async function sendPersonalSlackMessage(message: string) {
+  const channelId = await getDirectMessageChannelId(SLACK_USER_ID);
+  if (channelId) {
+    await sendSlackMessage(channelId, message);
   }
 }
 
