@@ -29,7 +29,7 @@ const MERGED_STATUS_NAME = 'Testing';
 export const handler = async () => {
   const timeZone = 'America/Denver';
   const now = moment().tz(timeZone);
-  const today = now.clone().startOf('day');
+  const today = now.clone().startOf('day').add(7, 'hours'); // start at 7am
   const yesterday = addWeekdays(today.clone(), -1, HOLIDAYS);
   // don't report issues that were created more than 2 months ago
   const issueCutoff = today.clone().add(-2, 'months');
@@ -59,7 +59,7 @@ export const handler = async () => {
       yesterday.clone().endOf('day')
     );
 
-    todayEvents = await getCalendarEvents(calendar, today, today.clone().endOf('day'));
+    todayEvents = await getCalendarEvents(calendar, today.clone().startOf('day'), today.clone().endOf('day'));
 
   } catch (error) {
     console.error('Error fetching calendar events:', error);
@@ -99,12 +99,12 @@ export const handler = async () => {
   // Get Linear issues
   const yesterdayIssues = await getLinearIssues({
     start: yesterday,
-    end: today,
+    end: now,
     issueCutoff,
     inProgressCutoff,
   });
   const todayIssues = await getLinearIssues({
-    start: today,
+    start: now,
     end: now,
     issueCutoff,
     inProgressCutoff,
@@ -276,11 +276,16 @@ query ($start: DateTimeOrDuration!, $end: DateTimeOrDuration!, $cutoff: DateTime
   const response = await axios.post(url, { query, variables }, { headers });
 
   const issues = response.data.data.issues.nodes;
-  const stateChangedTo = (issue: any, stateName: string, options: { after?: moment.Moment } = {}) =>
+
+  // console.log('issues', issues);
+
+  const stateChangedTo = (issue: any, stateName: string, options: { after?: moment.Moment } = {}) => {
     // was created with the given state and hasn't been updated since
     // (we count this as the "initial" state change)
-    (issue.history.nodes.length === 0 && issue.state.name === stateName) ||
+    const hasNoHistory = (issue.history.nodes.length === 0 && issue.state.name === stateName);
+
     // was updated to the given state
+    const didChangeToState = 
     issue.history.nodes.some((node: any) => {
       const didChangeToState =
         node.toState?.name === stateName && node.fromState?.name !== stateName;
@@ -289,6 +294,10 @@ query ($start: DateTimeOrDuration!, $end: DateTimeOrDuration!, $cutoff: DateTime
       }
       return didChangeToState;
     });
+
+    // console.log('stateChangedTo', { issue, stateName, options, hasNoHistory, didChangeToState });
+    return hasNoHistory || didChangeToState;
+  };
 
   const formatIssue = (issue: any) => `${issue.identifier} ${issue.title}`;
 
@@ -327,7 +336,15 @@ async function prepareSlackMessage({
   todayEvents: string[];
   todayIssues: { inProgress: string[] };
 }): Promise<string> {
-  let message = (await getLlmHappyGreeting(new Date())) + '\n\n';
+
+  let message = '';
+
+  const random = Math.random();
+  if (random < 0.33) {
+    message = (await happyGreeting(new Date())) + '\n\n';
+  } else if (random < 0.66) {
+    message = (await getLlmHappyGreeting(new Date())) + '\n\n';
+  }
 
   message += '*Did*\n';
 
@@ -404,8 +421,8 @@ async function getLlmHappyGreeting(date: Date) {
           content: `
             Generate a happy greeting using just two or three words that reflects the way you feel today and/or the emotions you want to send out to brighten others' day.
             Do not use phrasing that sounds like an instruction. (For example, don't say "Be happy" or "Have a great day.")
-            Don't use any form of these words: vibe, joy.
-            Moderately prefer greetings that use alliteration, but only if the alliteration is good phonetically. For example, "Terrific Tuesday" is good alliteration but "Terrific Thursday" is not, because "T" and "Th" are different sounds.
+            Don't use any form of these words: vibe, joy, radical.
+            Prefer greetings that use alliteration, but only if the alliteration is good phonetically. For example, "Terrific Tuesday" is good alliteration but "Terrific Thursday" is not, because "T" and "Th" are different sounds.
             Follow the greeting with one or two emojis that correspond to the current weather condition of "${weatherCondition}", or a happy or positive idea (smiling face, rainbow, sunflower, rocket, etc). 
             The greeting may include the day of the week (today is ${weekday}).
             Do not use words to fit the emoji. Use emoji that fit the greeting.
