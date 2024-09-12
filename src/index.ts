@@ -197,6 +197,7 @@ async function getCalendarEvents(
         event.summary &&
         event.transparency !== 'transparent' &&
         event.status === 'confirmed' &&
+        event.visibility === 'public' &&
         !event.description?.toLowerCase().includes('personal') &&
         event.summary.toLowerCase().trim() !== 'busy' &&
         (!event.attendees || !event.attendees.some(attendee => attendee.self && attendee.responseStatus === 'declined'))
