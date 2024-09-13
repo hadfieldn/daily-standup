@@ -17,7 +17,7 @@ Lambda function that generates a daily standup report for a Slack channel, based
 - Create a new Lambda function in the AWS Management Console.
 - Set the runtime to Node.js.
 - Build the deployment package: `npm run prepare-deploy`
-- Upload `lambda-deployment-package.zip` to the Lambda function.
+- Upload `dist/lambda-function.zip` to the Lambda function.
 
 2. Environment Variables:
 
@@ -171,26 +171,9 @@ Replace YOUR_LINEAR_API_KEY with your actual Linear API key. If the key is valid
 
 4. Obtain a Refresh Token
 
-- Generate the Authorization URL:
+   Until the app has been verified, the refresh token will last only 7 days.
+   To simplify the process of getting a refresh token, you can run this simple app:
 
-  Replace YOUR_CLIENT_ID and YOUR_REDIRECT_URI with your details:
-
-```bash
-https://accounts.google.com/o/oauth2/auth?client_id=YOUR_CLIENT_ID&redirect_uri=urn:ietf:wg:oauth:2.0:oob&response_type=code&scope=https://www.googleapis.com/auth/calendar&access_type=offline
-```
-
-- Open the URL in a browser, authorize the app, and get the authorization code.
-- Exchange the Authorization Code for Tokens:
-
-```bash
-curl \
---request POST \
---data "code=AUTHORIZATION_CODE&client_id=YOUR_CLIENT_ID&client_secret=YOUR_CLIENT_SECRET&redirect_uri=urn:ietf:wg:oauth:2.0:oob&grant_type=authorization_code" \
-https://oauth2.googleapis.com/token
-```
-
-Replace AUTHORIZATION_CODE, YOUR_CLIENT_ID, YOUR_CLIENT_SECRET, and YOUR_REDIRECT_URI with your respective information. This will return an access token and a refresh token in JSON format.
-
-- Store the Credentials Securely
-  - Client ID and Secret: Use these for authenticating your application when interacting with Google APIs.
-  - Refresh Token: Store it securely and use it to obtain a new access token when the previous one expires.
+   ```console
+     $ npm run auth
+   ```

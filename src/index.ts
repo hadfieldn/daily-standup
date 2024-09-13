@@ -47,7 +47,7 @@ export const handler = async () => {
   let todayEvents: string[];
 
   try {
-  // Initialize Google Calendar API client
+    // Initialize Google Calendar API client
     const oAuth2Client = new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
     oAuth2Client.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN });
     const calendar = google.calendar({ version: 'v3', auth: oAuth2Client });
@@ -55,12 +55,15 @@ export const handler = async () => {
     // Get Google Calendar events
     yesterdayEvents = await getCalendarEvents(
       calendar,
-      yesterday,
+      yesterday.clone().startOf('day'),
       yesterday.clone().endOf('day')
     );
 
-    todayEvents = await getCalendarEvents(calendar, today.clone().startOf('day'), today.clone().endOf('day'));
-
+    todayEvents = await getCalendarEvents(
+      calendar,
+      today.clone().startOf('day'),
+      today.clone().endOf('day')
+    );
   } catch (error) {
     console.error('Error fetching calendar events:', error);
     await sendPersonalSlackMessage(`Error fetching calendar events: ${error}`);
@@ -86,7 +89,6 @@ export const handler = async () => {
     };
   }
 
-
   const vacationEvent = detectVacationEvent(todayEvents);
   if (vacationEvent) {
     console.log(`Skipping standup because of out-of-office event '${vacationEvent}'`);
@@ -99,12 +101,12 @@ export const handler = async () => {
   // Get Linear issues
   const yesterdayIssues = await getLinearIssues({
     start: yesterday,
-    end: now,
+    end: today,
     issueCutoff,
     inProgressCutoff,
   });
   const todayIssues = await getLinearIssues({
-    start: now,
+    start: today,
     end: now,
     issueCutoff,
     inProgressCutoff,
@@ -191,18 +193,24 @@ async function getCalendarEvents(
   });
 
   const events = response.data.items || [];
-  return events
-    .filter(
-      (event) =>
-        event.summary &&
-        event.transparency !== 'transparent' &&
-        event.status === 'confirmed' &&
-        event.visibility === 'public' &&
-        !event.description?.toLowerCase().includes('personal') &&
-        event.summary.toLowerCase().trim() !== 'busy' &&
-        (!event.attendees || !event.attendees.some(attendee => attendee.self && attendee.responseStatus === 'declined'))
-    )
-    .map((event) => event.summary);
+  return events.filter(filterCalendarEvent).map((event) => event.summary);
+}
+
+function filterCalendarEvent(event) {
+  const include =
+    event.summary &&
+    event.transparency !== 'transparent' &&
+    event.status === 'confirmed' &&
+    event.visibility !== 'private' &&
+    !event.description?.toLowerCase().includes('personal') &&
+    event.summary.toLowerCase().trim() !== 'busy' &&
+    (!event.attendees ||
+      !event.attendees.some((attendee) => attendee.self && attendee.responseStatus === 'declined'));
+
+  if (!include) {
+    console.log('Skipping event', { event });
+  }
+  return include;
 }
 
 /**
@@ -280,14 +288,17 @@ query ($start: DateTimeOrDuration!, $end: DateTimeOrDuration!, $cutoff: DateTime
 
   // console.log('issues', issues);
 
-  const stateChangedTo = (issue: any, stateName: string, options: { after?: moment.Moment } = {}) => {
+  const stateChangedTo = (
+    issue: any,
+    stateName: string,
+    options: { after?: moment.Moment } = {}
+  ) => {
     // was created with the given state and hasn't been updated since
     // (we count this as the "initial" state change)
-    const hasNoHistory = (issue.history.nodes.length === 0 && issue.state.name === stateName);
+    const hasNoHistory = issue.history.nodes.length === 0 && issue.state.name === stateName;
 
     // was updated to the given state
-    const didChangeToState = 
-    issue.history.nodes.some((node: any) => {
+    const didChangeToState = issue.history.nodes.some((node: any) => {
       const didChangeToState =
         node.toState?.name === stateName && node.fromState?.name !== stateName;
       if (options.after) {
@@ -337,7 +348,6 @@ async function prepareSlackMessage({
   todayEvents: string[];
   todayIssues: { inProgress: string[] };
 }): Promise<string> {
-
   let message = '';
 
   const random = Math.random();
